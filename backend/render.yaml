@@ -5,9 +5,13 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: ANAM_API_KEY
         sync: false
       - key: OPENWEATHER_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
