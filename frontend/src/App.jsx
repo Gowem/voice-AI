@@ -5,6 +5,7 @@ import { api } from './services/api';
 import { PERSONAS, DEFAULT_PERSONA } from './constants/personas';
 import AvatarView from './components/AvatarView';
 import ControlBar from './components/ControlBar';
+import LiveSubtitles from './components/LiveSubtitles';
 import SlidePanel from './components/SlidePanel';
 import VoiceSelector from './components/VoiceSelector';
 import Conversation from './components/Conversation';
@@ -29,6 +30,14 @@ function normalizeAnamPersona(p) {
   };
 }
 
+const STATUS_DOT = {
+  idle:       { color: 'bg-white/20',                 label: 'Offline' },
+  connecting: { color: 'bg-yellow-400 animate-pulse', label: 'Connecting…' },
+  ready:      { color: 'bg-green-400 animate-pulse',  label: 'Live' },
+  speaking:   { color: 'bg-blue-400 animate-pulse',   label: 'Speaking' },
+  error:      { color: 'bg-red-400',                  label: 'Error' },
+};
+
 export default function App() {
   const [personaList,  setPersonaList]  = useState(PERSONAS);
   const [personaIndex, setPersonaIndex] = useState(0);
@@ -38,8 +47,9 @@ export default function App() {
 
   const selectedPersona = personaList[personaIndex] || DEFAULT_PERSONA;
   const anam = useAnam();
+  const dot  = STATUS_DOT[anam.status] || STATUS_DOT.idle;
 
-  // ── Send message → backend → avatar speaks ───────────────────────────────
+  // ── Send message → backend → avatar speaks ──────────────────────────────
   const processMessage = useCallback(async (text) => {
     setIsProcessing(true);
     try {
@@ -53,7 +63,7 @@ export default function App() {
     }
   }, [anam]);
 
-  // ── PTT: fires when user releases the mic button ──────────────────────────
+  // ── PTT fires when user releases the mic button ──────────────────────────
   const speech = useSpeech({
     onUtterance: useCallback((text) => {
       if (!text.trim()) return;
@@ -88,7 +98,6 @@ export default function App() {
     setMessages([]);
   }
 
-  // PTT — hold to record, release to send
   function handlePttStart() {
     if (isProcessing || anam.status === 'speaking') return;
     speech.start();
@@ -98,7 +107,7 @@ export default function App() {
     speech.stop();
   }
 
-  // ── Persona swipe ─────────────────────────────────────────────────────────
+  // ── Persona navigation ────────────────────────────────────────────────────
 
   function goToPersona(idx) {
     const next = (idx + personaList.length) % personaList.length;
@@ -113,8 +122,6 @@ export default function App() {
     setPanel(null);
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
   function addMessage(msg) {
     setMessages((prev) => [
       ...prev,
@@ -125,48 +132,105 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#0a0a0f]">
+    <div className="relative w-screen overflow-hidden bg-[#0a0a0f]" style={{ height: '100dvh' }}>
 
+      {/* ── Layer 1: Full-screen avatar video + idle state + swipe ── */}
       <AvatarView
         status={anam.status}
         persona={selectedPersona}
-        messages={messages}
-        interimText={speech.interimTranscript}
         error={anam.error}
-        isListening={speech.isListening}
         personaList={personaList}
         personaIndex={personaIndex}
         onNext={() => goToPersona(personaIndex + 1)}
         onPrev={() => goToPersona(personaIndex - 1)}
       />
 
-      {/* Top bar */}
-      <div
-        className="absolute top-0 left-0 right-0 flex items-center px-5 pointer-events-none"
-        style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
-      >
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-lg">
-            V
+      {/* ── Layer 2: UI overlay — flex column, top → bottom ── */}
+      <div className="absolute inset-0 flex flex-col pointer-events-none">
+
+        {/* ── Header ── */}
+        <div
+          className="flex-none flex items-center justify-between px-5 pointer-events-auto"
+          style={{ paddingTop: 'max(14px, env(safe-area-inset-top))' }}
+        >
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-base font-bold shadow-lg shadow-indigo-500/30">
+              V
+            </div>
+            <span className="text-white font-bold text-lg tracking-wide">Voice AI</span>
           </div>
-          <span className="text-white/70 font-semibold text-sm tracking-wide">Voice AI</span>
+
+          {/* Status badge */}
+          <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full">
+            <span className={`w-1.5 h-1.5 rounded-full ${dot.color}`} />
+            <span className="text-white/60 text-xs">{dot.label}</span>
+          </div>
         </div>
+
+        {/* Error banner */}
+        {anam.error && (
+          <div className="flex-none mx-5 mt-2 bg-red-500/20 border border-red-500/30 backdrop-blur-sm text-red-300 text-xs px-4 py-2 rounded-xl text-center">
+            {anam.error}
+          </div>
+        )}
+
+        {/* STT not supported warning */}
+        {!speech.isSupported && (
+          <div className="flex-none mx-5 mt-2 bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 text-xs px-4 py-2 rounded-xl text-center">
+            Speech recognition requires Chrome or Edge
+          </div>
+        )}
+
+        {/* ── Spacer — touch events pass through to AvatarView swipe ── */}
+        <div className="flex-1" />
+
+        {/* ── Live subtitles ── */}
+        <div className="flex-none pointer-events-none pb-1 px-1">
+          <LiveSubtitles
+            messages={messages}
+            interimText={speech.interimTranscript}
+            isListening={speech.isListening}
+          />
+        </div>
+
+        {/* ── Persona dot indicators ── */}
+        {personaList.length > 1 && (
+          <div className="flex-none flex justify-center items-center gap-1.5 py-2">
+            {personaList.map((_, i) => (
+              <div
+                key={i}
+                className={`rounded-full transition-all duration-300 ${
+                  i === personaIndex ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/30'
+                }`}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* ── Control bar ── */}
+        <div
+          className="flex-none pointer-events-auto pb-4"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 16px)' }}
+        >
+          <ControlBar
+            status={anam.status}
+            isListening={speech.isListening}
+            isProcessing={isProcessing}
+            onStart={handleStart}
+            onStop={handleStop}
+            onPttStart={handlePttStart}
+            onPttEnd={handlePttEnd}
+            onOpenVoices={() => setPanel(panel === 'voices' ? null : 'voices')}
+            onOpenChat={() => setPanel(panel === 'chat' ? null : 'chat')}
+            messageCount={messages.length}
+            persona={selectedPersona}
+          />
+        </div>
+
       </div>
 
-      <ControlBar
-        status={anam.status}
-        isListening={speech.isListening}
-        isProcessing={isProcessing}
-        onStart={handleStart}
-        onStop={handleStop}
-        onPttStart={handlePttStart}
-        onPttEnd={handlePttEnd}
-        onOpenVoices={() => setPanel(panel === 'voices' ? null : 'voices')}
-        onOpenChat={() => setPanel(panel === 'chat' ? null : 'chat')}
-        messageCount={messages.length}
-        persona={selectedPersona}
-      />
-
+      {/* ── Panels ── */}
       {panel === 'voices' && (
         <SlidePanel open onClose={() => setPanel(null)} title="Avatar & Voice">
           <VoiceSelector
@@ -188,11 +252,6 @@ export default function App() {
         </SlidePanel>
       )}
 
-      {!speech.isSupported && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 text-xs px-4 py-2 rounded-full whitespace-nowrap">
-          Speech recognition requires Chrome or Edge
-        </div>
-      )}
     </div>
   );
 }
