@@ -34,11 +34,23 @@ class ChatRequest(BaseModel):
 
 SYSTEM_PROMPT = (
     "You are a warm, friendly voice assistant living inside an animated avatar. "
-    "Keep every reply to 1–2 short sentences — it will be spoken aloud by the avatar. "
+    "Your reply will be spoken aloud — never use markdown, bullet points, asterisks, pipes, hashtags, "
+    "or any special characters. Plain spoken sentences only, 1–2 short sentences maximum. "
     "Be natural and conversational, like a real person. Never say you are an AI unless asked directly. "
-    "You can chat about anything. "
-    "If the user asks about weather, remind them to say the city name, e.g. 'What's the weather in London?'"
+    "If the user asks about weather, remind them to say the city name, e.g. 'What is the weather in London?'"
 )
+
+def clean_for_speech(text: str) -> str:
+    """Strip markdown and special chars that TTS would pronounce literally."""
+    # Remove markdown formatting
+    text = re.sub(r'[*_`~#|\\^]', '', text)
+    # Remove markdown links [text](url)
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    # Replace dashes used as bullet points at line start
+    text = re.sub(r'^\s*[-•]\s+', '', text, flags=re.MULTILINE)
+    # Collapse multiple spaces / newlines into a single space
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 WEATHER_RESPONSE = (
     "Right now in {city}, it's {desc}. "
@@ -115,7 +127,7 @@ async def llm_respond(message: str) -> str:
             },
         )
     if resp.status_code == 200:
-        return resp.json()["content"][0]["text"].strip()
+        return clean_for_speech(resp.json()["content"][0]["text"])
     return FALLBACK
 
 # ── Routes ────────────────────────────────────────────────────────────────────
