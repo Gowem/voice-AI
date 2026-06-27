@@ -1,8 +1,9 @@
 services:
   - type: web
     name: voice-ai-backend
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: ANAM_API_KEY
         sync: false
