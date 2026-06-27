@@ -41,10 +41,10 @@ SYSTEM_PROMPT = (
 )
 
 WEATHER_RESPONSE = (
-    "Right now in {city}, {country}, it's {desc}. "
-    "The temperature is {temp} degrees, but it feels more like {feels}. "
-    "Expect a high of {hi} and a low of {lo} today. "
-    "Humidity is at {hum} percent, with winds around {wind} kilometres per hour."
+    "Right now in {city}, it's {desc}. "
+    "The temperature is {temp} degrees Celsius, feeling like {feels}. "
+    "Today's high is {hi} and the low is {lo}. "
+    "Humidity is {hum} percent, with winds at {wind} kilometres per hour."
 )
 
 CITY_ASK  = "Which city would you like the weather for?"
@@ -84,15 +84,14 @@ def extract_city(text: str) -> str | None:
 
 def format_weather(data: dict) -> str:
     return WEATHER_RESPONSE.format(
-        city    = data["name"],
-        country = data["sys"]["country"],
-        desc    = data["weather"][0]["description"],
-        temp    = round(data["main"]["temp"]),
-        feels   = round(data["main"]["feels_like"]),
-        hi      = round(data["main"]["temp_max"]),
-        lo      = round(data["main"]["temp_min"]),
-        hum     = data["main"]["humidity"],
-        wind    = round(data["wind"]["speed"] * 3.6),
+        city  = data["name"],
+        desc  = data["weather"][0]["description"],
+        temp  = round(data["main"]["temp"]),
+        feels = round(data["main"]["feels_like"]),
+        hi    = round(data["main"]["temp_max"]),
+        lo    = round(data["main"]["temp_min"]),
+        hum   = data["main"]["humidity"],
+        wind  = round(data["wind"]["speed"] * 3.6),
     )
 
 # ── LLM helper ────────────────────────────────────────────────────────────────
@@ -120,6 +119,10 @@ async def llm_respond(message: str) -> str:
     return FALLBACK
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.get("/")
+async def root():
+    return {"status": "Voice AI API is running", "version": "1.0.0"}
 
 @app.get("/health")
 async def health():

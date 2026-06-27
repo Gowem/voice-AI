@@ -1,106 +1,81 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-const SpeechRecognition =
-  window.SpeechRecognition || window.webkitSpeechRecognition;
-
 /**
- * Continuous auto-listen hook (English only).
- * Calls onUtterance(text) each time a complete sentence is detected.
- * Auto-restarts after each result. Pauses when muted (avatar is speaking).
+ * Push-to-talk speech hook.
+ * start() → begin recording
+ * stop()  → finalize & call onUtterance(text)
  */
 export function useSpeech({ onUtterance } = {}) {
-  const recognitionRef = useRef(null);
-  const isMutedRef    = useRef(false);
-  const activeRef     = useRef(false); // true while user wants mic on
+  const recRef         = useRef(null);
+  const collectedRef   = useRef('');   // accumulated final results
+  const lastInterimRef = useRef('');   // last interim (captured at stop time)
   const onUtteranceRef = useRef(onUtterance);
   onUtteranceRef.current = onUtterance;
 
   const [interimTranscript, setInterimTranscript] = useState('');
   const [isListening,  setIsListening]  = useState(false);
-  const [isSupported]                   = useState(Boolean(SpeechRecognition));
+  const [isSupported]                   = useState(
+    () => !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+  );
 
-  const createRec = useCallback(() => {
-    if (!SpeechRecognition) return null;
-    const rec = new SpeechRecognition();
-    rec.lang = 'en-US';
-    rec.continuous = true;
-    rec.interimResults = true;
+  const start = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR || recRef.current) return;
+
+    collectedRef.current   = '';
+    lastInterimRef.current = '';
+
+    const rec = new SR();
+    rec.lang            = 'en-US';
+    rec.continuous      = true;
+    rec.interimResults  = true;
     rec.maxAlternatives = 1;
 
-    rec.onstart = () => setIsListening(true);
-
-    rec.onresult = (event) => {
-      if (isMutedRef.current) return;
+    rec.onresult = (e) => {
       let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const r = event.results[i];
-        if (r.isFinal) {
-          const text = r[0].transcript.trim();
-          if (text) {
-            setInterimTranscript('');
-            onUtteranceRef.current?.(text);
-          }
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          collectedRef.current += e.results[i][0].transcript + ' ';
         } else {
-          interim += r[0].transcript;
+          interim += e.results[i][0].transcript;
         }
       }
-      if (!isMutedRef.current) setInterimTranscript(interim);
-    };
-
-    rec.onerror = (e) => {
-      if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        console.warn('SpeechRecognition error:', e.error);
-      }
+      lastInterimRef.current = interim;
+      setInterimTranscript(interim);
     };
 
     rec.onend = () => {
+      recRef.current = null;
       setIsListening(false);
       setInterimTranscript('');
-      recognitionRef.current = null;
-      // Auto-restart if user hasn't stopped and isn't muted
-      if (activeRef.current && !isMutedRef.current) {
-        setTimeout(startRec, 250);
-      }
+      const text = (collectedRef.current + lastInterimRef.current).trim();
+      if (text) onUtteranceRef.current?.(text);
     };
 
-    return rec;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    rec.onerror = (e) => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      console.warn('STT error:', e.error);
+      recRef.current = null;
+      setIsListening(false);
+      setInterimTranscript('');
+    };
 
-  function startRec() {
-    if (!SpeechRecognition || recognitionRef.current) return;
-    const rec = createRec();
-    if (!rec) return;
-    recognitionRef.current = rec;
-    try { rec.start(); } catch (_) {}
-  }
-
-  const start = useCallback(() => {
-    activeRef.current = true;
-    isMutedRef.current = false;
-    startRec();
-  }, [createRec]); // eslint-disable-line react-hooks/exhaustive-deps
+    recRef.current = rec;
+    try {
+      rec.start();
+      setIsListening(true);
+    } catch (_) {
+      recRef.current = null;
+    }
+  }, []);
 
   const stop = useCallback(() => {
-    activeRef.current = false;
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setIsListening(false);
-    setInterimTranscript('');
+    if (recRef.current) {
+      recRef.current.stop(); // triggers onend which fires onUtterance
+    }
   }, []);
 
-  const mute = useCallback(() => {
-    isMutedRef.current = true;
-    setInterimTranscript('');
-  }, []);
+  useEffect(() => () => { recRef.current?.stop(); }, []);
 
-  const unmute = useCallback(() => {
-    isMutedRef.current = false;
-  }, []);
-
-  useEffect(() => () => {
-    activeRef.current = false;
-    recognitionRef.current?.stop();
-  }, []);
-
-  return { interimTranscript, isListening, isSupported, start, stop, mute, unmute };
+  return { interimTranscript, isListening, isSupported, start, stop };
 }

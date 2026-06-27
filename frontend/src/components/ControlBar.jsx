@@ -1,34 +1,35 @@
 /**
- * Floating bottom control bar — mobile-first.
+ * Floating bottom control bar — push-to-talk edition.
  *
  * Props:
  *   status         — avatar status
- *   isListening    — mic active
- *   isProcessing   — backend in-flight
- *   micEnabled     — current mic state
+ *   isListening    — mic active (button held)
+ *   isProcessing   — backend in-flight / avatar speaking
  *   onStart()      — start avatar session
  *   onStop()       — stop avatar session
- *   onToggleMic()  — toggle mic on/off
+ *   onPttStart()   — pointer down on mic → start recording
+ *   onPttEnd()     — pointer up/cancel   → stop & send
  *   onOpenVoices() — open avatar selector panel
  *   onOpenChat()   — open conversation panel
- *   messageCount   — unread badge for chat
+ *   messageCount   — badge for chat button
  *   persona        — active persona
  */
 export default function ControlBar({
   status,
   isListening,
   isProcessing,
-  micEnabled,
   onStart,
   onStop,
-  onToggleMic,
+  onPttStart,
+  onPttEnd,
   onOpenVoices,
   onOpenChat,
   messageCount,
   persona,
 }) {
-  const isConnected = status === 'ready' || status === 'speaking';
+  const isConnected  = status === 'ready' || status === 'speaking';
   const isConnecting = status === 'connecting';
+  const isBusy       = isProcessing || status === 'speaking';
 
   return (
     <div className="control-bar absolute bottom-0 left-0 right-0 flex flex-col items-center pointer-events-none">
@@ -52,7 +53,7 @@ export default function ControlBar({
 
         {/* ── Primary action ── */}
         {!isConnected && !isConnecting ? (
-          /* START button */
+          /* START */
           <button
             onClick={onStart}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
@@ -64,43 +65,53 @@ export default function ControlBar({
             </svg>
             <span>Start</span>
           </button>
+
         ) : isConnecting ? (
           /* CONNECTING */
           <button disabled className="flex items-center gap-2 bg-white/10 text-white/50 text-sm font-semibold px-5 py-3 rounded-xl min-h-[48px]">
             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             <span>Starting…</span>
           </button>
+
         ) : (
-          /* MIC button — primary action when connected */
-          <div className="relative">
-            {isListening && micEnabled && !isProcessing && (
-              <span className="absolute inset-0 rounded-full bg-indigo-500 mic-ring" />
-            )}
-            <button
-              onClick={onToggleMic}
-              disabled={isProcessing || status === 'speaking'}
-              className={`relative w-14 h-14 rounded-full flex items-center justify-center transition-all
-                          active:scale-95 shadow-xl
-                          ${micEnabled
-                            ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/30'
-                            : 'bg-white/10 hover:bg-white/20'
-                          }
-                          disabled:opacity-40 disabled:cursor-not-allowed`}
-            >
-              {isProcessing ? (
-                <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-              ) : micEnabled ? (
-                /* Mic on */
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zm-7 8h2a5 5 0 0010 0h2a7 7 0 01-6 6.92V20h3v2H8v-2h3v-2.08A7 7 0 015 11z" />
-                </svg>
-              ) : (
-                /* Mic muted */
-                <svg className="w-6 h-6 text-white/50" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z" />
-                </svg>
+          /* PUSH-TO-TALK button */
+          <div className="flex flex-col items-center gap-1">
+            <div className="relative">
+              {isListening && (
+                <span className="absolute inset-0 rounded-full bg-red-500 mic-ring pointer-events-none" />
               )}
-            </button>
+              <button
+                onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); onPttStart?.(); }}
+                onPointerUp={onPttEnd}
+                onPointerCancel={onPttEnd}
+                disabled={isBusy}
+                onContextMenu={(e) => e.preventDefault()}
+                className={`relative w-14 h-14 rounded-full flex items-center justify-center
+                            transition-all active:scale-95 shadow-xl select-none touch-none
+                            ${isListening
+                              ? 'bg-red-600 shadow-red-500/40'
+                              : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/30'
+                            }
+                            disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                {isBusy ? (
+                  <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : isListening ? (
+                  /* Square = recording / release to send */
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="5" y="5" width="14" height="14" rx="2" />
+                  </svg>
+                ) : (
+                  /* Mic = hold to speak */
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zm-7 8h2a5 5 0 0010 0h2a7 7 0 01-6 6.92V20h3v2H8v-2h3v-2.08A7 7 0 015 11z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            <span className="text-[9px] leading-none text-white/40 select-none">
+              {isBusy ? 'Wait…' : isListening ? 'Release to send' : 'Hold to speak'}
+            </span>
           </div>
         )}
 
@@ -133,8 +144,8 @@ export default function ControlBar({
             </span>
           )}
         </div>
-      </div>
 
+      </div>
     </div>
   );
 }

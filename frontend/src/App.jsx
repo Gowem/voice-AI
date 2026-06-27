@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAnam } from './hooks/useAnam';
 import { useSpeech } from './hooks/useSpeech';
 import { api } from './services/api';
@@ -32,33 +32,20 @@ function normalizeAnamPersona(p) {
 export default function App() {
   const [personaList,  setPersonaList]  = useState(PERSONAS);
   const [personaIndex, setPersonaIndex] = useState(0);
-  const [micEnabled,   setMicEnabled]   = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [messages,     setMessages]     = useState([]);
   const [panel,        setPanel]        = useState(null);
 
   const selectedPersona = personaList[personaIndex] || DEFAULT_PERSONA;
+  const anam = useAnam();
 
-  // Holds a user message spoken while the avatar was still talking
-  const pendingRef = useRef(null);
-
-  const anam   = useAnam();
-
-  // ── Core: send a message to backend → make avatar speak ──────────────────
+  // ── Send message → backend → avatar speaks ───────────────────────────────
   const processMessage = useCallback(async (text) => {
     setIsProcessing(true);
     try {
       const result = await api.chat(text);
       addMessage({ role: 'assistant', text: result.response, type: result.type });
       await anam.speak(result.response);
-
-      // If user spoke while avatar was talking, handle it now
-      if (pendingRef.current) {
-        const next = pendingRef.current;
-        pendingRef.current = null;
-        addMessage({ role: 'user', text: next });
-        await processMessage(next);
-      }
     } catch (err) {
       addMessage({ role: 'assistant', text: err.message || 'Something went wrong.', type: 'error' });
     } finally {
@@ -66,20 +53,13 @@ export default function App() {
     }
   }, [anam]);
 
-  // ── Speech callback ───────────────────────────────────────────────────────
+  // ── PTT: fires when user releases the mic button ──────────────────────────
   const speech = useSpeech({
     onUtterance: useCallback((text) => {
       if (!text.trim()) return;
       addMessage({ role: 'user', text });
-
-      if (anam.status === 'speaking' || isProcessing) {
-        // Avatar is mid-response — queue and handle after it finishes
-        pendingRef.current = text;
-        return;
-      }
-
       processMessage(text);
-    }, [anam.status, isProcessing, processMessage]),
+    }, [processMessage]),
   });
 
   // Fetch real personas on mount
@@ -88,8 +68,7 @@ export default function App() {
       .then((data) => {
         const raw = Array.isArray(data) ? data : (data.data || data.personas || []);
         if (raw.length > 0) {
-          const normalized = raw.map(normalizeAnamPersona);
-          setPersonaList(normalized);
+          setPersonaList(raw.map(normalizeAnamPersona));
           setPersonaIndex(0);
         }
       })
@@ -100,28 +79,23 @@ export default function App() {
 
   async function handleStart() {
     setMessages([]);
-    pendingRef.current = null;
     await anam.startSession(selectedPersona);
-    setMicEnabled(true);
-    speech.start();
   }
 
   function handleStop() {
     speech.stop();
-    setMicEnabled(false);
     anam.stopSession();
     setMessages([]);
-    pendingRef.current = null;
   }
 
-  function handleToggleMic() {
-    if (micEnabled) {
-      speech.stop();
-      setMicEnabled(false);
-    } else {
-      speech.start();
-      setMicEnabled(true);
-    }
+  // PTT — hold to record, release to send
+  function handlePttStart() {
+    if (isProcessing || anam.status === 'speaking') return;
+    speech.start();
+  }
+
+  function handlePttEnd() {
+    speech.stop();
   }
 
   // ── Persona swipe ─────────────────────────────────────────────────────────
@@ -129,8 +103,7 @@ export default function App() {
   function goToPersona(idx) {
     const next = (idx + personaList.length) % personaList.length;
     setPersonaIndex(next);
-    const persona = personaList[next];
-    if (anam.isConnected) anam.startSession(persona);
+    if (anam.isConnected) anam.startSession(personaList[next]);
   }
 
   function handlePersonaChange(persona) {
@@ -160,7 +133,7 @@ export default function App() {
         messages={messages}
         interimText={speech.interimTranscript}
         error={anam.error}
-        isListening={micEnabled && speech.isListening}
+        isListening={speech.isListening}
         personaList={personaList}
         personaIndex={personaIndex}
         onNext={() => goToPersona(personaIndex + 1)}
@@ -184,10 +157,10 @@ export default function App() {
         status={anam.status}
         isListening={speech.isListening}
         isProcessing={isProcessing}
-        micEnabled={micEnabled}
         onStart={handleStart}
         onStop={handleStop}
-        onToggleMic={handleToggleMic}
+        onPttStart={handlePttStart}
+        onPttEnd={handlePttEnd}
         onOpenVoices={() => setPanel(panel === 'voices' ? null : 'voices')}
         onOpenChat={() => setPanel(panel === 'chat' ? null : 'chat')}
         messageCount={messages.length}
