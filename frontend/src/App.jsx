@@ -54,8 +54,10 @@ export default function App() {
     setIsProcessing(true);
     try {
       const result = await api.chat(text);
-      addMessage({ role: 'assistant', text: result.response, type: result.type });
+      // speak() waits until Anam fires endOfSpeech — avatar caption streams live
       await anam.speak(result.response);
+      // Add to history AFTER avatar finishes so it doesn't duplicate the streaming caption
+      addMessage({ role: 'assistant', text: result.response, type: result.type });
     } catch (err) {
       addMessage({ role: 'assistant', text: err.message || 'Something went wrong.', type: 'error' });
     } finally {
@@ -145,8 +147,13 @@ export default function App() {
         onPrev={() => goToPersona(personaIndex - 1)}
       />
 
-      {/* ── Layer 2: UI overlay — flex column, top → bottom ── */}
-      <div className="absolute inset-0 flex flex-col pointer-events-none">
+      {/* ── Layer 2: UI overlay — flex column, top → bottom ──
+           z-index + translateZ forces this above the hardware-decoded video
+           on Android where <video> normally renders above all HTML. ── */}
+      <div
+        className="absolute inset-0 flex flex-col pointer-events-none"
+        style={{ zIndex: 10, transform: 'translateZ(0)' }}
+      >
 
         {/* ── Header ── */}
         <div
@@ -191,6 +198,7 @@ export default function App() {
             messages={messages}
             interimText={speech.interimTranscript}
             isListening={speech.isListening}
+            streamingCaption={anam.streamingCaption}
           />
         </div>
 

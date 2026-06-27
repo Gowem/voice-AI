@@ -4,30 +4,25 @@ import { api } from '../services/api';
 
 const DEV_API_KEY = import.meta.env.VITE_ANAM_API_KEY;
 
-/**
- * Manages the Anam AI avatar session lifecycle.
- *
- * In local dev (VITE_ANAM_API_KEY set):
- *   Uses unsafe_createClientWithApiKey — no backend token exchange needed.
- *
- * In production:
- *   Fetches a short-lived session token from our backend.
- */
 export function useAnam() {
-  const clientRef = useRef(null);
-  const [status, setStatus] = useState('idle');
-  const [error, setError] = useState(null);
-  const [currentPersonaId, setCurrentPersonaId] = useState(null);
+  const clientRef        = useRef(null);
+  const streamBufRef     = useRef('');   // accumulates chunks for current speak turn
+  const onSpeakDoneRef   = useRef(null); // resolve() for the current speak() promise
+
+  const [status,          setStatus]          = useState('idle');
+  const [error,           setError]           = useState(null);
+  const [currentPersonaId,setCurrentPersonaId]= useState(null);
+  const [streamingCaption,setStreamingCaption]= useState(''); // live word-by-word avatar text
 
   const stopSession = useCallback(async () => {
     if (clientRef.current) {
       try {
-        if (clientRef.current.isStreaming?.()) {
-          await clientRef.current.stopStreaming();
-        }
+        if (clientRef.current.isStreaming?.()) await clientRef.current.stopStreaming();
       } catch (_) {}
       clientRef.current = null;
     }
+    streamBufRef.current = '';
+    setStreamingCaption('');
     setStatus('idle');
     setCurrentPersonaId(null);
     setError(null);
@@ -42,14 +37,10 @@ export function useAnam() {
 
       try {
         let client;
-
         if (DEV_API_KEY) {
-          // Local dev: use API key directly (never do this in production)
           client = unsafe_createClientWithApiKey(DEV_API_KEY, { personaId: persona.id });
         } else {
-          // Production: exchange API key for short-lived session token on backend
           const { sessionToken } = await api.getAnamSession(persona.id);
-          // Try without personaConfig first (ephemeral/stateful tokens embed it)
           try {
             client = createClient(sessionToken);
           } catch {
@@ -62,6 +53,24 @@ export function useAnam() {
           clientRef.current = null;
           setCurrentPersonaId(null);
           setStatus('idle');
+        });
+
+        // ── Real-time word-by-word caption from Anam ──────────────────────
+        client.addListener('MESSAGE_STREAM_EVENT_RECEIVED', (event) => {
+          if (event.role !== 'persona') return;
+
+          streamBufRef.current += event.content;
+          setStreamingCaption(streamBufRef.current);
+
+          if (event.endOfSpeech) {
+            // Avatar finished the current sentence — resolve speak() promise
+            const resolve = onSpeakDoneRef.current;
+            onSpeakDoneRef.current = null;
+            streamBufRef.current = '';
+            setStreamingCaption('');
+            setStatus('ready');
+            resolve?.();
+          }
         });
 
         await client.streamToVideoAndAudioElements(videoElementId, audioElementId);
@@ -80,13 +89,18 @@ export function useAnam() {
   const speak = useCallback(async (text) => {
     if (!clientRef.current || !text?.trim()) return;
     setStatus('speaking');
-    try {
-      await clientRef.current.talk(text);
-    } catch (err) {
-      setError(err?.message || 'Failed to speak');
-    } finally {
-      if (clientRef.current) setStatus('ready');
-    }
+    streamBufRef.current = '';
+    setStreamingCaption('');
+
+    await new Promise((resolve) => {
+      onSpeakDoneRef.current = resolve;
+
+      clientRef.current.talk(text).catch((err) => {
+        setError(err?.message || 'Failed to speak');
+        onSpeakDoneRef.current = null;
+        resolve(); // don't hang
+      });
+    });
   }, []);
 
   useEffect(() => () => { stopSession(); }, [stopSession]);
@@ -95,10 +109,11 @@ export function useAnam() {
     status,
     error,
     currentPersonaId,
+    streamingCaption,   // live word-by-word text from Anam SDK
     startSession,
     stopSession,
     speak,
-    mute: () => {},   // placeholder — Anam SDK mic mute not needed in our flow
+    mute:   () => {},
     unmute: () => {},
     isConnected: status === 'ready' || status === 'speaking',
   };
