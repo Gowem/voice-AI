@@ -4,7 +4,7 @@
 export const PERSONAS = [
   // ── English (US) ──────────────────────────────────────────────────────────
   {
-    id: 'f348bd25-d547-40e4-9ce6-b6e08c54c191',
+    id: 'cfb87fec-d585-49aa-80fb-c75427d13193',
     name: 'Leo',
     gender: 'Male',
     language: 'en',
@@ -16,19 +16,7 @@ export const PERSONAS = [
     gradient: 'from-blue-600 to-indigo-700',
   },
   {
-    id: '241c13f0-87f9-4023-817a-67ff4db124ed',
-    name: 'Corey',
-    gender: 'Male',
-    language: 'en',
-    langName: 'English',
-    accent: 'American',
-    emoji: '🧑‍💻',
-    recognitionLang: 'en-US',
-    description: 'Cheerful & supportive American male',
-    gradient: 'from-sky-500 to-blue-600',
-  },
-  {
-    id: 'ebf99885-c22b-4382-9a9d-533f3e9ce819',
+    id: 'ed5c528f-2520-455d-b8ea-ab62185ecd2e',
     name: 'Rachel',
     gender: 'Female',
     language: 'en',
@@ -40,8 +28,8 @@ export const PERSONAS = [
     gradient: 'from-purple-600 to-pink-600',
   },
   {
-    id: 'ee72775c-f1be-4f36-84ed-11a7743da33a',
-    name: 'Amanda',
+    id: '97201261-892a-4f7c-bc74-9d46e20c0f2e',
+    name: 'Mia',
     gender: 'Female',
     language: 'en',
     langName: 'English',
@@ -51,9 +39,21 @@ export const PERSONAS = [
     description: 'Warm & approachable American female',
     gradient: 'from-rose-500 to-pink-600',
   },
+  {
+    id: '2df2d2f2-7a5b-42bc-b8f7-831cda6ffddd',
+    name: 'Gabriel',
+    gender: 'Male',
+    language: 'en',
+    langName: 'English',
+    accent: 'American',
+    emoji: '🧑‍💻',
+    recognitionLang: 'en-US',
+    description: 'Cheerful & supportive American male',
+    gradient: 'from-sky-500 to-blue-600',
+  },
   // ── English (GB) ──────────────────────────────────────────────────────────
   {
-    id: 'c42fd72e-f8d5-4ff2-81de-84624d84da52',
+    id: '4a86ba37-0156-4d58-a9f1-f6e6e5d21c0b',
     name: 'Archie',
     gender: 'Male',
     language: 'en',
@@ -65,7 +65,7 @@ export const PERSONAS = [
     gradient: 'from-indigo-600 to-violet-700',
   },
   {
-    id: '6f2e870c-40d9-4491-86db-ff0310a21ec8',
+    id: '50587f5a-a7ff-41f5-ac93-496541b08619',
     name: 'Lucy',
     gender: 'Female',
     language: 'en',

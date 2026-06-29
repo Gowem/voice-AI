@@ -39,11 +39,13 @@ const STATUS_DOT = {
 };
 
 export default function App() {
-  const [personaList,  setPersonaList]  = useState(PERSONAS);
-  const [personaIndex, setPersonaIndex] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [messages,     setMessages]     = useState([]);
-  const [panel,        setPanel]        = useState(null);
+  const [personaList,    setPersonaList]    = useState(PERSONAS);
+  const [personaIndex,   setPersonaIndex]   = useState(0);
+  const [isProcessing,   setIsProcessing]   = useState(false);
+  const [messages,       setMessages]       = useState([]);
+  const [panel,          setPanel]          = useState(null);
+  const [personasLoaded, setPersonasLoaded] = useState(false);
+  const [personaError,   setPersonaError]   = useState(null);
 
   const selectedPersona = personaList[personaIndex] || DEFAULT_PERSONA;
   const anam = useAnam();
@@ -74,17 +76,27 @@ export default function App() {
     }, [processMessage]),
   });
 
-  // Fetch real personas on mount
+  // Fetch real personas from the Anam API on mount
   useEffect(() => {
+    setPersonaError(null);
     api.getPersonas()
       .then((data) => {
         const raw = Array.isArray(data) ? data : (data.data || data.personas || []);
         if (raw.length > 0) {
           setPersonaList(raw.map(normalizeAnamPersona));
           setPersonaIndex(0);
+          setPersonasLoaded(true);
+        } else {
+          console.warn('[App] No personas returned from API, using fallback list');
+          setPersonasLoaded(true);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error('[App] Failed to fetch personas:', err);
+        setPersonaError('Could not load personas from Anam API. Check your API key.');
+        // Still allow using hardcoded fallbacks
+        setPersonasLoaded(true);
+      });
   }, []);
 
   // ── Session control ───────────────────────────────────────────────────────
@@ -179,6 +191,13 @@ export default function App() {
         {anam.error && (
           <div className="flex-none mx-5 mt-2 bg-red-500/20 border border-red-500/30 backdrop-blur-sm text-red-300 text-xs px-4 py-2 rounded-xl text-center">
             {anam.error}
+          </div>
+        )}
+
+        {/* Persona fetch error banner */}
+        {personaError && (
+          <div className="flex-none mx-5 mt-2 bg-orange-500/20 border border-orange-500/30 backdrop-blur-sm text-orange-300 text-xs px-4 py-2 rounded-xl text-center">
+            {personaError}
           </div>
         )}
 

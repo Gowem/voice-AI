@@ -78,8 +78,18 @@ export function useAnam() {
         clientRef.current = client;
         setCurrentPersonaId(persona.id);
       } catch (err) {
+        // Extract meaningful error from Anam SDK ClientError objects
+        let errorMsg = 'Failed to start avatar session';
+        if (err?.message) {
+          errorMsg = err.message;
+          // Anam SDK ClientError includes a `cause` in the options
+          if (err.cause) {
+            errorMsg += `: ${err.cause}`;
+          }
+        }
+        console.error('[useAnam] startSession error:', err);
         setStatus('error');
-        setError(err?.message || 'Failed to start avatar session');
+        setError(errorMsg);
         clientRef.current = null;
       }
     },
